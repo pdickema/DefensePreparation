@@ -1,0 +1,42 @@
+paths:
+  data_dir: data
+  raw_pdf_dir: data/raw_pdfs
+  manifest_path: data/manifest.csv
+  processed_dir: data/processed
+  markdown_dir: data/processed/markdown
+  json_dir: data/processed/json
+  tei_dir: data/processed/tei
+  chunks_dir: data/chunks
+  chunks_jsonl: data/chunks/chunks.jsonl
+  index_dir: data/index
+  reports_dir: data/reports
+
+conversion:
+  primary: docling
+  use_grobid: false
+  grobid_url: "http://localhost:8070"
+  fallback_marker: false
+  fallback_ocr: false
+  preserve_references: true
+  suspicious_text_length: 1200
+
+chunking:
+  target_tokens: 900
+  overlap_tokens: 120
+
+index:
+  enabled: false
+  provider: sentence-transformers
+  model: sentence-transformers/all-MiniLM-L6-v2
+  vector_store: chromadb
+  allow_external_embeddings: false
+
+privacy:
+  local_only: true
+  allow_external_pdf_upload: false
+  allow_external_text_upload: false
+  allow_llm_generation: false
+
+defense_prep:
+  enabled: true
+  generate_llm_hooks: true

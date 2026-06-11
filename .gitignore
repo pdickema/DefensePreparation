@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# VS Code local state
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/mcp.example.json
+
+# Private source PDFs and generated corpus artifacts
+data/raw_pdfs/**
+!data/raw_pdfs/
+!data/raw_pdfs/.gitkeep
+
+data/processed/**
+!data/processed/
+!data/processed/.gitkeep
+!data/processed/markdown/
+!data/processed/markdown/.gitkeep
+!data/processed/json/
+!data/processed/json/.gitkeep
+!data/processed/tei/
+!data/processed/tei/.gitkeep
+
+data/chunks/**
+!data/chunks/
+!data/chunks/.gitkeep
+
+data/index/**
+!data/index/
+!data/index/.gitkeep
+
+data/reports/**
+!data/reports/
+!data/reports/.gitkeep
+
+# Keep the example manifest tracked.
+!data/
+!data/manifest.csv
