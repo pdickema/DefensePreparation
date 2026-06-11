@@ -23,7 +23,7 @@ class PathsConfig(BaseModel):
 
 
 class ConversionConfig(BaseModel):
-    primary: Literal["docling"] = "docling"
+    primary: Literal["docling", "pypdfium2-text"] = "docling"
     use_grobid: bool = False
     grobid_url: str = "http://localhost:8070"
     fallback_marker: bool = False

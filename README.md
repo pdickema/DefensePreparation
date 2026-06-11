@@ -42,6 +42,22 @@ For PDF conversion with Docling, also install:
 python -m pip install -e ".[docling]"
 ```
 
+If Docling fails for a PDF, the pipeline falls back to local text-layer
+extraction with `pypdfium2`. This fallback is less structured than Docling but
+keeps the paper in the corpus instead of dropping it.
+
+For large batches of text-based PDFs, you can skip Docling and use the faster
+local text-layer converter first:
+
+```yaml
+conversion:
+  primary: pypdfium2-text
+```
+
+Use this when you care more about complete searchable text than table/figure
+structure. Keep `primary: docling` when you want Docling to attempt richer
+document structure before the fallback is considered.
+
 For optional local vector search:
 
 ```powershell
@@ -96,7 +112,10 @@ python -m paper_pipeline.cli run-all
    ```
 
    When `scan-pdfs` finds PDFs inside an examiner folder, it uses that folder
-   name as the draft `examiner` value in `data/manifest.csv`.
+   name as the draft `examiner` value in `data/manifest.csv`. It also tries to
+   extract title, year, DOI, and source from embedded PDF metadata and the first
+   pages of text. Treat these values as a draft and correct them in the manifest
+   before running the full pipeline.
 
 2. Generate or update the draft manifest:
 
@@ -191,6 +210,16 @@ conversion:
 If GROBID is enabled but unavailable, the pipeline logs a warning and continues
 with Docling or another configured fallback.
 
+For privacy, non-local GROBID URLs are blocked unless you explicitly allow PDF
+upload in `config/config.yaml`:
+
+```yaml
+privacy:
+  allow_external_pdf_upload: true
+```
+
+Leave this disabled for normal local defense-preparation work.
+
 ## Optional OCR Setup
 
 OCR is disabled by default. Enable it only if you need scanned PDF support.
@@ -277,6 +306,9 @@ Usually do not commit:
 - `.env`
 - OCR intermediate files
 - large generated reports
+
+Once `data/manifest.csv` contains real corpus metadata, treat it as project data:
+commit it only if you intentionally want those bibliographic records in Git.
 
 ## Tests
 

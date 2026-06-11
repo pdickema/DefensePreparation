@@ -6,11 +6,13 @@ from paper_pipeline.config import AppConfig, PathsConfig
 from paper_pipeline.manifest import (
     NO_PDFS_MESSAGE,
     initialize_data,
+    merge_extracted_metadata,
     read_manifest,
     scan_pdfs,
     validate_manifest,
     write_manifest,
 )
+from paper_pipeline.pdf_metadata import ExtractedPdfMetadata, metadata_from_values
 
 
 def make_config(tmp_path):
@@ -67,6 +69,27 @@ def test_scan_pdfs_infers_examiner_from_folder(tmp_path):
     assert row["title"] == "energy accounting"
 
 
+def test_scan_pdfs_handles_multiple_examiner_folders(tmp_path):
+    config = make_config(tmp_path)
+    initialize_data(config)
+    for examiner, filename in [
+        ("Wolf Fichtner", "energy-storage.pdf"),
+        ("Marc Wouters", "management-accounting.pdf"),
+    ]:
+        pdf_path = config.path("raw_pdf_dir") / examiner / filename
+        pdf_path.parent.mkdir()
+        pdf_path.write_bytes(b"%PDF-1.4 mock")
+
+    scan_pdfs(config)
+    rows = read_manifest(config.path("manifest_path"))
+
+    assert {row["examiner"] for row in rows} == {"Wolf Fichtner", "Marc Wouters"}
+    assert {row["filename"] for row in rows} == {
+        "Wolf Fichtner/energy-storage.pdf",
+        "Marc Wouters/management-accounting.pdf",
+    }
+
+
 def test_scan_pdfs_replaces_example_rows_when_real_pdfs_are_found(tmp_path):
     config = make_config(tmp_path)
     initialize_data(config)
@@ -78,6 +101,76 @@ def test_scan_pdfs_replaces_example_rows_when_real_pdfs_are_found(tmp_path):
     rows = read_manifest(config.path("manifest_path"))
 
     assert [row["filename"] for row in rows] == ["Wolf Fichtner/energy-accounting.pdf"]
+
+
+def test_merge_extracted_metadata_preserves_manual_values():
+    row = {
+        "filename": "Wolf Fichtner/paper.pdf",
+        "examiner": "Wolf Fichtner",
+        "title": "Manual Title",
+        "year": "2024",
+        "doi": "",
+        "source": "",
+        "notes": "Curated by hand",
+    }
+    extracted = ExtractedPdfMetadata(
+        title="Extracted Title",
+        year="2026",
+        doi="10.1016/example",
+        source="Energy Journal",
+    )
+
+    updated, changed = merge_extracted_metadata(row, extracted, row["filename"])
+
+    assert updated["title"] == "Manual Title"
+    assert updated["year"] == "2024"
+    assert updated["doi"] == "10.1016/example"
+    assert updated["source"] == "Energy Journal"
+    assert changed == ["doi", "source"]
+
+
+def test_metadata_from_pdf_values_extracts_scientific_fields():
+    extracted = metadata_from_values(
+        {
+            "Title": "Design limits and investment risks of mid-term storage",
+            "Subject": "Energy Conversion and Management, 360 (2026) 121554. "
+            "doi:10.1016/j.enconman.2026.121554",
+            "Creator": "Elsevier",
+        },
+        "",
+    )
+
+    assert extracted.title == "Design limits and investment risks of mid-term storage"
+    assert extracted.year == "2026"
+    assert extracted.doi == "10.1016/j.enconman.2026.121554"
+    assert extracted.source == "Energy Conversion and Management"
+
+
+def test_metadata_year_prefers_publication_year_over_body_year():
+    extracted = metadata_from_values(
+        {
+            "Title": "A stochastic multi-energy simulation model for UK residential buildings",
+            "Subject": "Energy & Buildings, 168 (2018) 470-489. "
+            "doi:10.1016/j.enbuild.2018.02.051",
+            "Creator": "Elsevier",
+        },
+        "The UK government is aiming at a national carbon emission reduction target by 2050.",
+    )
+
+    assert extracted.year == "2018"
+    assert extracted.doi == "10.1016/j.enbuild.2018.02.051"
+
+
+def test_doi_does_not_consume_following_metadata():
+    extracted = metadata_from_values(
+        {
+            "Subject": "Journal, 1 (2026) 1. doi:10.1016/j.test.2026.123456",
+            "Creator": "Elsevier",
+        },
+        "",
+    )
+
+    assert extracted.doi == "10.1016/j.test.2026.123456"
 
 
 def test_validate_manifest_detects_duplicate_hashes(tmp_path):

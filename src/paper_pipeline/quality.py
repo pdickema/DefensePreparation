@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections import Counter
 from pathlib import Path
 from statistics import mean
 
@@ -18,16 +19,20 @@ def generate_quality_report(config: AppConfig) -> Path:
     json_files = sorted(json_dir.glob("*.json")) if json_dir.exists() else []
     chunks = read_jsonl(config.path("chunks_jsonl"))
     enriched_rows = _read_enriched(config.path("processed_dir") / "manifest_enriched.csv")
+    processed_filenames: set[str] = set()
+    chunks_by_paper = Counter(str(chunk.get("paper_id", "")) for chunk in chunks)
 
     successful = len(json_files)
     failed = max(0, len(raw_pdfs) - successful)
     fallback_count = 0
     warnings: list[str] = []
     suspicious: list[str] = []
+    paper_summaries: list[str] = []
     grobid_available = "not configured"
 
     for json_file in json_files:
         paper = read_json(json_file)
+        processed_filenames.add(str(paper.get("metadata", {}).get("filename", "")))
         conversion = paper.get("conversion", {})
         if conversion.get("fallback_used"):
             fallback_count += 1
@@ -36,17 +41,37 @@ def generate_quality_report(config: AppConfig) -> Path:
         for warning in conversion.get("warnings", []):
             filename = paper.get("metadata", {}).get("filename", json_file.name)
             warnings.append(f"{filename}: {warning}")
-        text_size = sum(len(str(section.get("text", ""))) for section in paper.get("sections", []))
+        sections = paper.get("sections", [])
+        text_size = sum(len(str(section.get("text", ""))) for section in sections)
         if text_size < config.conversion.suspicious_text_length:
             suspicious.append(paper.get("metadata", {}).get("filename", json_file.name))
+        paper_summaries.append(
+            _paper_summary(
+                paper,
+                conversion,
+                len(sections),
+                chunks_by_paper[str(paper.get("paper_id", ""))],
+            )
+        )
 
     chunk_sizes = [estimate_tokens(chunk.get("text", "")) for chunk in chunks]
+    tiny_chunks = [
+        str(chunk.get("chunk_id", ""))
+        for chunk in chunks
+        if estimate_tokens(chunk.get("text", "")) < 30
+    ]
     missing_metadata = [
         row
         for row in enriched_rows
         if "missing" in row.get("validation_warnings", "").lower()
     ]
     duplicates = [row for row in enriched_rows if row.get("duplicate_sha256") == "true"]
+    failed_pdfs = [
+        str(path.relative_to(config.path("raw_pdf_dir"))).replace("\\", "/")
+        for path in raw_pdfs
+        if str(path.relative_to(config.path("raw_pdf_dir"))).replace("\\", "/")
+        not in processed_filenames
+    ]
 
     lines = [
         "# Conversion Quality Report",
@@ -59,6 +84,7 @@ def generate_quality_report(config: AppConfig) -> Path:
         f"- Fallbacks used: {fallback_count}",
         f"- Chunks generated: {len(chunks)}",
         f"- Average chunk size: {round(mean(chunk_sizes), 1) if chunk_sizes else 0}",
+        f"- Tiny chunks (<30 tokens): {len(tiny_chunks)}",
         f"- GROBID availability: {grobid_available}",
         "",
     ]
@@ -80,6 +106,9 @@ def generate_quality_report(config: AppConfig) -> Path:
         )
 
     lines.extend(_section("Suspiciously Short Extractions", suspicious))
+    lines.extend(_section("Failed Conversions", failed_pdfs))
+    lines.extend(_section("Per-Paper Conversion", paper_summaries))
+    lines.extend(_section("Tiny Chunks", tiny_chunks))
     lines.extend(
         _section("Missing Metadata Rows", [row.get("filename", "") for row in missing_metadata])
     )
@@ -105,3 +134,17 @@ def _section(title: str, items: list[str]) -> list[str]:
         lines.extend(f"- {item}" for item in items if item)
     lines.append("")
     return lines
+
+
+def _paper_summary(
+    paper: dict[str, object],
+    conversion: dict[str, object],
+    section_count: int,
+    chunk_count: int,
+) -> str:
+    metadata = paper.get("metadata", {})
+    metadata = metadata if isinstance(metadata, dict) else {}
+    filename = metadata.get("filename", paper.get("paper_id", "unknown paper"))
+    actual_tool = conversion.get("actual_tool") or conversion.get("primary_tool") or "unknown"
+    fallback = "fallback" if conversion.get("fallback_used") else "primary"
+    return f"{filename}: {actual_tool} ({fallback}), {section_count} sections, {chunk_count} chunks"

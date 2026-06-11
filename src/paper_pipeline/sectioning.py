@@ -16,6 +16,9 @@ STANDARD_SECTION_NAMES = {
     "conclusion",
     "references",
 }
+NUMBERED_HEADING_RE = re.compile(
+    r"^(?:[1-9]|[1-9]\d)\s*\.\s*(?:\d+\s*\.\s*)*[A-Z][A-Za-z0-9,;:()/%&\- ]{2,100}$"
+)
 
 
 @dataclass
@@ -71,18 +74,33 @@ def parse_markdown_sections(markdown: str) -> list[dict[str, object]]:
             current_lines = []
         else:
             stripped = line.strip()
-            if (
-                stripped.lower() in STANDARD_SECTION_NAMES
-                and len(stripped) <= 40
-                and current_lines
-                and not current_lines[-1].strip()
-            ):
+            if _is_plain_heading(stripped, current_lines):
                 flush()
                 current_heading = stripped
-                current_level = 1
+                current_level = _plain_heading_level(stripped)
                 current_lines = []
             else:
                 current_lines.append(line)
 
     flush()
     return [section.to_dict() for section in sections if str(section.text).strip()]
+
+
+def _is_plain_heading(stripped: str, current_lines: list[str]) -> bool:
+    if not stripped:
+        return False
+    normalized = stripped.lower().strip(".")
+    if normalized in STANDARD_SECTION_NAMES and len(stripped) <= 60:
+        return True
+    if NUMBERED_HEADING_RE.match(stripped):
+        return True
+    if not current_lines or current_lines[-1].strip():
+        return False
+    return normalized in {"acknowledgements", "acknowledgments", "appendix"}
+
+
+def _plain_heading_level(stripped: str) -> int:
+    match = re.match(r"^((?:\d+\s*\.\s*)+)", stripped)
+    if not match:
+        return 1
+    return min(6, max(1, match.group(1).count(".")))

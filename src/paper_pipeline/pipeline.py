@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from paper_pipeline import chunking
 from paper_pipeline.cleaning import clean_markdown
@@ -12,6 +13,7 @@ from paper_pipeline.converters import (
     grobid_converter,
     marker_converter,
     ocr_converter,
+    pdfium_text_converter,
 )
 from paper_pipeline.converters.common import ConversionResult
 from paper_pipeline.hashing import sha256_file
@@ -50,11 +52,19 @@ def process_papers(config: AppConfig) -> OperationResult:
 
     grobid_available = False
     if config.conversion.use_grobid:
-        grobid_available = grobid_converter.is_available(config.conversion.grobid_url)
-        if not grobid_available:
-            warning = "GROBID is enabled but not reachable; continuing without TEI extraction."
+        if not _grobid_upload_allowed(config):
+            warning = (
+                "GROBID URL is not local and privacy.allow_external_pdf_upload is false; "
+                "skipping TEI extraction."
+            )
             result.warnings.append(warning)
             LOGGER.warning(warning)
+        else:
+            grobid_available = grobid_converter.is_available(config.conversion.grobid_url)
+            if not grobid_available:
+                warning = "GROBID is enabled but not reachable; continuing without TEI extraction."
+                result.warnings.append(warning)
+                LOGGER.warning(warning)
 
     for row in rows:
         filename = row.get("filename", "")
@@ -107,7 +117,7 @@ def process_papers(config: AppConfig) -> OperationResult:
                 "fallback_used": conversion.fallback_used,
                 "grobid_available": grobid_available,
                 "grobid_tei_written": tei_written,
-                "warnings": warnings + conversion.warnings,
+                "warnings": list(dict.fromkeys(warnings + conversion.warnings)),
             },
             "sections": sections,
             "references": [],
@@ -128,11 +138,28 @@ def process_papers(config: AppConfig) -> OperationResult:
 def _convert_with_fallbacks(
     config: AppConfig, pdf_path: Path, warnings: list[str]
 ) -> ConversionResult | None:
+    if config.conversion.primary == "pypdfium2-text":
+        try:
+            conversion = pdfium_text_converter.convert_pdf(pdf_path)
+            conversion.fallback_used = False
+            conversion.warnings = []
+            return conversion
+        except Exception as exc:
+            warnings.append(f"Primary pypdfium2 text conversion failed: {exc}")
+
     try:
-        return docling_converter.convert_pdf(pdf_path)
+        docling_result = docling_converter.convert_pdf(pdf_path)
     except Exception as exc:
         warnings.append(f"Docling failed or unavailable: {exc}")
         LOGGER.warning("Docling failed for %s: %s", pdf_path, exc)
+    else:
+        pdfium_result = _pdfium_if_docling_incomplete(pdf_path, docling_result, warnings)
+        return pdfium_result or docling_result
+
+    try:
+        return pdfium_text_converter.convert_pdf(pdf_path)
+    except Exception as exc:
+        warnings.append(f"pypdfium2 text fallback failed: {exc}")
 
     if config.conversion.fallback_marker:
         try:
@@ -155,6 +182,50 @@ def _convert_with_fallbacks(
                 finally:
                     if ocr_pdf.exists():
                         ocr_pdf.unlink(missing_ok=True)
+
+    return None
+
+
+def _grobid_upload_allowed(config: AppConfig) -> bool:
+    if config.privacy.allow_external_pdf_upload:
+        return True
+    return _is_local_url(config.conversion.grobid_url)
+
+
+def _is_local_url(url: str) -> bool:
+    hostname = (urlparse(url).hostname or "").lower()
+    return hostname in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _pdfium_if_docling_incomplete(
+    pdf_path: Path,
+    docling_result: ConversionResult,
+    warnings: list[str],
+) -> ConversionResult | None:
+    try:
+        pdfium_result = pdfium_text_converter.convert_pdf(pdf_path)
+    except Exception as exc:
+        warnings.append(f"Could not run completeness check with pypdfium2: {exc}")
+        return None
+
+    docling_text = docling_result.markdown.lower()
+    pdfium_text = pdfium_result.markdown.lower()
+    docling_len = len(docling_text)
+    pdfium_len = len(pdfium_text)
+    refs_missing = "references" in pdfium_text and "references" not in docling_text
+    much_longer = pdfium_len > max(2000, int(docling_len * 1.35))
+
+    if refs_missing or much_longer:
+        reason = []
+        if refs_missing:
+            reason.append("references missing from Docling output")
+        if much_longer:
+            reason.append(f"text layer longer ({pdfium_len} vs {docling_len} chars)")
+        warning = "Docling output appears incomplete; used pypdfium2 text fallback: " + ", ".join(
+            reason
+        )
+        pdfium_result.warnings = [warning]
+        return pdfium_result
 
     return None
 

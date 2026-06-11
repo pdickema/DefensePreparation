@@ -7,6 +7,7 @@ from typing import Any
 
 from paper_pipeline.config import AppConfig
 from paper_pipeline.hashing import sha256_file
+from paper_pipeline.pdf_metadata import ExtractedPdfMetadata, extract_pdf_metadata
 from paper_pipeline.utils import ensure_dir, relative_posix
 
 MANIFEST_COLUMNS = ["filename", "examiner", "title", "year", "doi", "source", "notes"]
@@ -119,6 +120,51 @@ def examiner_from_filename(filename: str) -> str:
     return parts[0]
 
 
+def title_from_filename(filename: str) -> str:
+    return Path(filename).stem.replace("_", " ").replace("-", " ")
+
+
+def merge_extracted_metadata(
+    row: dict[str, str],
+    extracted: ExtractedPdfMetadata,
+    filename: str,
+) -> tuple[dict[str, str], list[str]]:
+    updated = dict(row)
+    changed: list[str] = []
+    filename_title = title_from_filename(filename)
+
+    if not updated.get("examiner"):
+        updated["examiner"] = examiner_from_filename(filename)
+        if updated["examiner"]:
+            changed.append("examiner")
+
+    if extracted.title and (
+        not updated.get("title")
+        or updated.get("title", "").strip() == filename_title
+        or (
+            updated.get("notes", "").startswith("Draft row from scan-pdfs")
+            and updated.get("title") != extracted.title
+        )
+    ):
+        updated["title"] = extracted.title
+        changed.append("title")
+
+    for field_name in ["year", "doi", "source"]:
+        value = getattr(extracted, field_name)
+        should_replace_draft = (
+            updated.get("notes", "").startswith("Draft row from scan-pdfs")
+            and updated.get(field_name) != value
+        )
+        if value and (not updated.get(field_name) or should_replace_draft):
+            updated[field_name] = value
+            changed.append(field_name)
+
+    if changed and updated.get("notes") == "Draft row from scan-pdfs":
+        updated["notes"] = "Draft row from scan-pdfs; metadata extracted from PDF"
+
+    return updated, changed
+
+
 def scan_pdfs(config: AppConfig) -> OperationResult:
     initialize_data(config, force_manifest=False)
     raw_dir = config.path("raw_pdf_dir")
@@ -140,19 +186,39 @@ def scan_pdfs(config: AppConfig) -> OperationResult:
         messages.append("Removed placeholder example manifest rows before adding discovered PDFs.")
 
     for filename in sorted(discovered_names):
+        pdf_path = discovered_names[filename]
+        extracted = extract_pdf_metadata(pdf_path)
         if filename not in existing:
-            rows.append(
+            row, changed = merge_extracted_metadata(
                 {
                     "filename": filename,
                     "examiner": examiner_from_filename(filename),
-                    "title": Path(filename).stem.replace("_", " ").replace("-", " "),
+                    "title": title_from_filename(filename),
                     "year": "",
                     "doi": "",
                     "source": "",
                     "notes": "Draft row from scan-pdfs",
-                }
+                },
+                extracted,
+                filename,
+            )
+            rows.append(
+                row
             )
             messages.append(f"Added draft manifest row for {filename}")
+            if changed:
+                messages.append(f"Extracted metadata for {filename}: {', '.join(changed)}")
+        else:
+            row_index = next(
+                index for index, row in enumerate(rows) if row.get("filename") == filename
+            )
+            updated_row, changed = merge_extracted_metadata(rows[row_index], extracted, filename)
+            rows[row_index] = updated_row
+            if changed:
+                messages.append(f"Updated metadata for {filename}: {', '.join(changed)}")
+
+        for warning in extracted.warnings:
+            warnings.append(f"{filename}: {warning}")
 
     for row in rows:
         filename = row.get("filename", "")
