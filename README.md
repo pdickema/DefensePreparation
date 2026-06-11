@@ -1,4 +1,4 @@
-# DefensePreparationPhilip
+# DefensePreparation
 
 Local Python pipeline for converting scientific PDF papers into a clean,
 structured, RAG-ready research corpus for private doctoral-defense preparation.
