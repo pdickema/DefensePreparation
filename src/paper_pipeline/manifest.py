@@ -41,6 +41,7 @@ EXAMPLE_ROWS = [
         "notes": "DOI missing",
     },
 ]
+EXAMPLE_FILENAMES = {row["filename"] for row in EXAMPLE_ROWS}
 
 
 @dataclass
@@ -111,6 +112,13 @@ def list_pdfs(raw_pdf_dir: Path) -> list[Path]:
     return sorted(path for path in raw_pdf_dir.rglob("*.pdf") if path.is_file())
 
 
+def examiner_from_filename(filename: str) -> str:
+    parts = Path(filename).parts
+    if len(parts) <= 1:
+        return ""
+    return parts[0]
+
+
 def scan_pdfs(config: AppConfig) -> OperationResult:
     initialize_data(config, force_manifest=False)
     raw_dir = config.path("raw_pdf_dir")
@@ -126,12 +134,17 @@ def scan_pdfs(config: AppConfig) -> OperationResult:
         return OperationResult(messages=messages, warnings=warnings, rows=rows)
 
     discovered_names = {relative_posix(path, raw_dir): path for path in pdfs}
+    if rows and {row.get("filename", "") for row in rows} <= EXAMPLE_FILENAMES:
+        rows = []
+        existing = {}
+        messages.append("Removed placeholder example manifest rows before adding discovered PDFs.")
+
     for filename in sorted(discovered_names):
         if filename not in existing:
             rows.append(
                 {
                     "filename": filename,
-                    "examiner": "",
+                    "examiner": examiner_from_filename(filename),
                     "title": Path(filename).stem.replace("_", " ").replace("-", " "),
                     "year": "",
                     "doi": "",

@@ -51,6 +51,35 @@ def test_scan_pdfs_adds_mock_filenames(tmp_path):
     assert any("Added draft manifest row" in message for message in result.messages)
 
 
+def test_scan_pdfs_infers_examiner_from_folder(tmp_path):
+    config = make_config(tmp_path)
+    initialize_data(config)
+    examiner_dir = config.path("raw_pdf_dir") / "Wolf Fichtner"
+    examiner_dir.mkdir()
+    pdf_path = examiner_dir / "energy-accounting.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 mock")
+
+    scan_pdfs(config)
+    rows = read_manifest(config.path("manifest_path"))
+    row = next(row for row in rows if row["filename"] == "Wolf Fichtner/energy-accounting.pdf")
+
+    assert row["examiner"] == "Wolf Fichtner"
+    assert row["title"] == "energy accounting"
+
+
+def test_scan_pdfs_replaces_example_rows_when_real_pdfs_are_found(tmp_path):
+    config = make_config(tmp_path)
+    initialize_data(config)
+    pdf_path = config.path("raw_pdf_dir") / "Wolf Fichtner" / "energy-accounting.pdf"
+    pdf_path.parent.mkdir()
+    pdf_path.write_bytes(b"%PDF-1.4 mock")
+
+    scan_pdfs(config)
+    rows = read_manifest(config.path("manifest_path"))
+
+    assert [row["filename"] for row in rows] == ["Wolf Fichtner/energy-accounting.pdf"]
+
+
 def test_validate_manifest_detects_duplicate_hashes(tmp_path):
     config = make_config(tmp_path)
     initialize_data(config)

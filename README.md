@@ -89,6 +89,15 @@ python -m paper_pipeline.cli run-all
    data/raw_pdfs/
    ```
 
+   You may organize PDFs by examiner. For example:
+
+   ```text
+   data/raw_pdfs/Wolf Fichtner/
+   ```
+
+   When `scan-pdfs` finds PDFs inside an examiner folder, it uses that folder
+   name as the draft `examiner` value in `data/manifest.csv`.
+
 2. Generate or update the draft manifest:
 
    ```powershell
