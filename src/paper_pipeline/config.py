@@ -20,6 +20,8 @@ class PathsConfig(BaseModel):
     chunks_jsonl: Path = Path("data/chunks/chunks.jsonl")
     index_dir: Path = Path("data/index")
     reports_dir: Path = Path("data/reports")
+    exports_dir: Path = Path("data/exports")
+    llm_export_dir: Path = Path("data/exports/llm")
 
 
 class ConversionConfig(BaseModel):
@@ -65,6 +67,14 @@ class DefensePrepConfig(BaseModel):
     generate_llm_hooks: bool = True
 
 
+class LlmExportConfig(BaseModel):
+    enabled: bool = True
+    max_chunks_per_examiner: int = Field(default=24, ge=1)
+    max_chars_per_chunk: int = Field(default=1800, ge=200)
+    include_references: bool = True
+    include_full_chunk_text: bool = True
+
+
 class AppConfig(BaseModel):
     project_root: Path = Field(default_factory=Path.cwd)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -73,6 +83,7 @@ class AppConfig(BaseModel):
     index: IndexConfig = Field(default_factory=IndexConfig)
     privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
     defense_prep: DefensePrepConfig = Field(default_factory=DefensePrepConfig)
+    llm_export: LlmExportConfig = Field(default_factory=LlmExportConfig)
 
     def resolve(self, path: Path | str) -> Path:
         path = Path(path)

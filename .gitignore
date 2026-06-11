@@ -60,6 +60,8 @@ data/reports/**
 !data/reports/
 !data/reports/.gitkeep
 
+data/exports/**
+
 # Keep the example manifest tracked.
 !data/
 !data/manifest.csv

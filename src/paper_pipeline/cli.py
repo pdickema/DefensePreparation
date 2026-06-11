@@ -10,6 +10,7 @@ from paper_pipeline.config import load_config
 from paper_pipeline.defense_prep import generate_defense_prep
 from paper_pipeline.indexing import build_index as build_vector_index
 from paper_pipeline.indexing import query_index
+from paper_pipeline.llm_export import export_llm_corpus
 from paper_pipeline.manifest import initialize_data
 from paper_pipeline.manifest import scan_pdfs as scan_pdfs_command
 from paper_pipeline.manifest import validate_manifest as validate_manifest_command
@@ -89,6 +90,13 @@ def defense_prep(config: ConfigOption = Path("config/config.yaml")) -> None:
 
 
 @app.command()
+def export_llm(config: ConfigOption = Path("config/config.yaml")) -> None:
+    """Export paste-friendly and RAG-friendly local LLM corpus files."""
+    result = export_llm_corpus(_config(config))
+    _print_result(result.messages, result.warnings)
+
+
+@app.command()
 def build_index(config: ConfigOption = Path("config/config.yaml")) -> None:
     """Build an optional local ChromaDB vector index."""
     for message in build_vector_index(_config(config)):
@@ -109,7 +117,7 @@ def query(
 
 @app.command()
 def run_all(config: ConfigOption = Path("config/config.yaml")) -> None:
-    """Run init, scan, validate, process, chunk, report, and defense-prep."""
+    """Run init, scan, validate, process, chunk, report, defense-prep, and export-llm."""
     result = run_all_steps(_config(config))
     _print_result(result.messages, result.warnings)
 

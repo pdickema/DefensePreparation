@@ -84,6 +84,7 @@ This creates:
 - `data/chunks/`
 - `data/index/`
 - `data/reports/`
+- `data/exports/llm/`
 - `data/manifest.csv`
 
 The example manifest rows are placeholders. Replace them later with real paper
@@ -157,6 +158,7 @@ python -m paper_pipeline.cli process
 python -m paper_pipeline.cli chunk
 python -m paper_pipeline.cli report
 python -m paper_pipeline.cli defense-prep
+python -m paper_pipeline.cli export-llm
 python -m paper_pipeline.cli build-index
 python -m paper_pipeline.cli query "Which themes in Marc Wouters' papers might be relevant?"
 python -m paper_pipeline.cli run-all
@@ -181,6 +183,42 @@ All commands read `config/config.yaml` by default.
   - `data/reports/theme_index.md`
   - `data/reports/method_index.md`
   - `data/reports/theory_index.md`
+- LLM export files:
+  - `data/exports/llm/corpus_overview.md`
+  - `data/exports/llm/examiner_pack_<examiner>.md`
+  - `data/exports/llm/chunks_for_rag.jsonl`
+  - `data/exports/llm/llm_prompt_template.md`
+
+## LLM-Ready Outputs
+
+The canonical machine-readable RAG file is:
+
+```text
+data/chunks/chunks.jsonl
+```
+
+For easier copy/paste into an LLM chat or project workspace, run:
+
+```powershell
+python -m paper_pipeline.cli export-llm
+```
+
+This creates local-only exports in `data/exports/llm/`. Use
+`examiner_pack_<examiner>.md` when you want a compact briefing for one examiner,
+and use `chunks_for_rag.jsonl` when a RAG tool expects JSONL chunks with
+metadata. Ask the LLM to cite `chunk_id`, paper title, section, and source PDF.
+
+Control export size in `config/config.yaml`:
+
+```yaml
+llm_export:
+  max_chunks_per_examiner: 24
+  max_chars_per_chunk: 1800
+  include_references: true
+  include_full_chunk_text: true
+```
+
+The export command does not call an LLM and does not upload anything.
 
 ## Optional GROBID Setup
 
@@ -306,6 +344,7 @@ Usually do not commit:
 - `.env`
 - OCR intermediate files
 - large generated reports
+- generated LLM exports in `data/exports/`
 
 Once `data/manifest.csv` contains real corpus metadata, treat it as project data:
 commit it only if you intentionally want those bibliographic records in Git.

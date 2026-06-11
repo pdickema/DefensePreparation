@@ -40,3 +40,10 @@ privacy:
 defense_prep:
   enabled: true
   generate_llm_hooks: true
+
+llm_export:
+  enabled: true
+  max_chunks_per_examiner: 24
+  max_chars_per_chunk: 1800
+  include_references: true
+  include_full_chunk_text: true

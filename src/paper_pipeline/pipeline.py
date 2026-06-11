@@ -257,6 +257,7 @@ def chunk_processed_papers(config: AppConfig) -> OperationResult:
 
 def run_all(config: AppConfig) -> OperationResult:
     from paper_pipeline.defense_prep import generate_defense_prep
+    from paper_pipeline.llm_export import export_llm_corpus
     from paper_pipeline.manifest import initialize_data, scan_pdfs
 
     result = OperationResult()
@@ -275,4 +276,8 @@ def run_all(config: AppConfig) -> OperationResult:
 
     defense_paths = generate_defense_prep(config)
     result.messages.extend(f"Wrote defense-prep output: {path}" for path in defense_paths)
+    if config.llm_export.enabled:
+        export_result = export_llm_corpus(config)
+        result.messages.extend(export_result.messages)
+        result.warnings.extend(export_result.warnings)
     return result

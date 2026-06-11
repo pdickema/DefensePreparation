@@ -67,6 +67,8 @@ def data_directories(config: AppConfig) -> list[Path]:
         config.path("chunks_dir"),
         config.path("index_dir"),
         config.path("reports_dir"),
+        config.path("exports_dir"),
+        config.path("llm_export_dir"),
     ]
 
 
