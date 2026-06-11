@@ -1,3 +1,4 @@
 filename,examiner,title,year,doi,source,notes
-example_wouters_2015.pdf,Marc Wouters,Example Paper Title,2015,10.xxxx/example,Manual download,Replace this row later
-example_fichtner_2020.pdf,Wolf Fichtner,Another Example Paper,2020,,Manual download,DOI missing
+Wolf Fichtner/Layer et al 2026.pdf,Wolf Fichtner,Analyzing the influence of large-scale weather patterns on renewable energy systems: A review,2026,10.1016/j.rser.2026.117034,Renewable and Sustainable Energy Reviews,Draft row from scan-pdfs; metadata extracted from PDF
+Wolf Fichtner/McKenna et al 2018.pdf,Wolf Fichtner,A stochastic multi-energy simulation model for UK residential buildings,2018,10.1016/j.enbuild.2018.02.051,Energy & Buildings,Draft row from scan-pdfs; metadata extracted from PDF
+Wolf Fichtner/Stelzer et al 2026.pdf,Wolf Fichtner,Design limits and investment risks of mid-term storage under uncertain market conditions,2026,10.1016/j.enconman.2026.121554,Energy Conversion and Management,Draft row from scan-pdfs; metadata extracted from PDF
