@@ -16,6 +16,7 @@ from paper_pipeline.manifest import scan_pdfs as scan_pdfs_command
 from paper_pipeline.manifest import validate_manifest as validate_manifest_command
 from paper_pipeline.pipeline import chunk_processed_papers, process_papers
 from paper_pipeline.pipeline import run_all as run_all_steps
+from paper_pipeline.preflight import preflight_pdfs as preflight_pdfs_command
 from paper_pipeline.quality import generate_quality_report
 
 app = typer.Typer(no_args_is_help=True)
@@ -57,6 +58,13 @@ def scan_pdfs(config: ConfigOption = Path("config/config.yaml")) -> None:
 def validate_manifest(config: ConfigOption = Path("config/config.yaml")) -> None:
     """Validate manifest filenames, metadata, hashes, and duplicates."""
     result = validate_manifest_command(_config(config))
+    _print_result(result.messages, result.warnings)
+
+
+@app.command()
+def preflight_pdfs(config: ConfigOption = Path("config/config.yaml")) -> None:
+    """Inspect PDFs before conversion for text layer and metadata quality."""
+    result = preflight_pdfs_command(_config(config))
     _print_result(result.messages, result.warnings)
 
 

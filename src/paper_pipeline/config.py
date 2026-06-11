@@ -25,7 +25,7 @@ class PathsConfig(BaseModel):
 
 
 class ConversionConfig(BaseModel):
-    primary: Literal["docling", "pypdfium2-text"] = "docling"
+    primary: Literal["docling", "pypdfium2-text"] = "pypdfium2-text"
     use_grobid: bool = False
     grobid_url: str = "http://localhost:8070"
     fallback_marker: bool = False
@@ -67,6 +67,10 @@ class DefensePrepConfig(BaseModel):
     generate_llm_hooks: bool = True
 
 
+class ProcessingConfig(BaseModel):
+    clean_generated_outputs: bool = False
+
+
 class LlmExportConfig(BaseModel):
     enabled: bool = True
     max_chunks_per_examiner: int = Field(default=24, ge=1)
@@ -83,6 +87,7 @@ class AppConfig(BaseModel):
     index: IndexConfig = Field(default_factory=IndexConfig)
     privacy: PrivacyConfig = Field(default_factory=PrivacyConfig)
     defense_prep: DefensePrepConfig = Field(default_factory=DefensePrepConfig)
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     llm_export: LlmExportConfig = Field(default_factory=LlmExportConfig)
 
     def resolve(self, path: Path | str) -> Path:

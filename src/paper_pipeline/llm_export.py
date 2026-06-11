@@ -145,7 +145,9 @@ def _write_corpus_overview(
             lines.append(f"- {year}: {title}{doi_text}")
         lines.append("")
 
-    quality_lines = _quality_lines(papers)
+    paper_ids = {str(chunk.get("paper_id") or "") for chunk in chunks}
+    relevant_papers = {pid: papers[pid] for pid in paper_ids if pid in papers}
+    quality_lines = _quality_lines(relevant_papers)
     lines.extend(["## Quality Notes", ""])
     lines.extend(quality_lines or ["- No processed paper quality notes found."])
     lines.append("")
@@ -195,7 +197,7 @@ def _examiner_pack_lines(
 ) -> list[str]:
     paper_ids = sorted({str(chunk.get("paper_id") or "") for chunk in chunks})
     relevant_papers = {pid: papers[pid] for pid in paper_ids if pid in papers}
-    selected = chunks[: config.llm_export.max_chunks_per_examiner]
+    selected = _select_examiner_chunks(chunks, config.llm_export.max_chunks_per_examiner)
     lines = [
         f"# LLM Examiner Pack: {examiner}",
         "",
@@ -227,6 +229,62 @@ def _examiner_pack_lines(
     for chunk in selected:
         lines.extend(_chunk_excerpt_lines(chunk, config.llm_export.max_chars_per_chunk))
     return lines
+
+
+def _select_examiner_chunks(chunks: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    by_paper: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for chunk in chunks:
+        by_paper[str(chunk.get("paper_id") or chunk.get("title") or "unknown")].append(chunk)
+
+    for paper_chunks in by_paper.values():
+        paper_chunks.sort(
+            key=lambda chunk: (
+                _section_priority(str(chunk.get("section") or "")),
+                int(chunk.get("chunk_index") or 0),
+            )
+        )
+
+    paper_ids = sorted(
+        by_paper,
+        key=lambda paper_id: (
+            str(by_paper[paper_id][0].get("title") or ""),
+            paper_id,
+        ),
+    )
+    selected: list[dict[str, Any]] = []
+    while len(selected) < limit:
+        progressed = False
+        for paper_id in paper_ids:
+            paper_chunks = by_paper[paper_id]
+            if not paper_chunks:
+                continue
+            selected.append(paper_chunks.pop(0))
+            progressed = True
+            if len(selected) >= limit:
+                break
+        if not progressed:
+            break
+    return selected
+
+
+def _section_priority(section: str) -> int:
+    normalized = section.lower()
+    priorities = [
+        ("abstract", 0),
+        ("introduction", 1),
+        ("method", 2),
+        ("results", 3),
+        ("findings", 3),
+        ("discussion", 4),
+        ("conclusion", 5),
+        ("body", 6),
+        ("references", 90),
+        ("bibliography", 90),
+    ]
+    for keyword, priority in priorities:
+        if keyword in normalized:
+            return priority
+    return 50
 
 
 def _paper_lines(chunks: list[dict[str, Any]]) -> list[str]:

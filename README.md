@@ -36,27 +36,24 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-For PDF conversion with Docling, also install:
+For normal RAG corpus building, the default converter is local `pypdfium2-text`.
+It is fast, quiet, and works well for text-based scientific PDFs. For optional
+richer layout extraction with Docling, also install:
 
 ```powershell
 python -m pip install -e ".[docling]"
 ```
 
-If Docling fails for a PDF, the pipeline falls back to local text-layer
-extraction with `pypdfium2`. This fallback is less structured than Docling but
-keeps the paper in the corpus instead of dropping it.
-
-For large batches of text-based PDFs, you can skip Docling and use the faster
-local text-layer converter first:
+If you want Docling to attempt richer document structure before local text-layer
+extraction, set:
 
 ```yaml
 conversion:
-  primary: pypdfium2-text
+  primary: docling
 ```
 
-Use this when you care more about complete searchable text than table/figure
-structure. Keep `primary: docling` when you want Docling to attempt richer
-document structure before the fallback is considered.
+Docling may be slower and more memory-intensive on Windows. If it fails or
+returns incomplete output, the pipeline can still fall back to `pypdfium2-text`.
 
 For optional local vector search:
 
@@ -95,6 +92,7 @@ If there are no PDFs yet, these commands should still be friendly:
 ```powershell
 python -m paper_pipeline.cli scan-pdfs
 python -m paper_pipeline.cli validate-manifest
+python -m paper_pipeline.cli preflight-pdfs
 python -m paper_pipeline.cli run-all
 ```
 
@@ -142,7 +140,13 @@ python -m paper_pipeline.cli run-all
    python -m paper_pipeline.cli validate-manifest
    ```
 
-5. Run the pipeline:
+5. Inspect the PDFs before conversion:
+
+   ```powershell
+   python -m paper_pipeline.cli preflight-pdfs
+   ```
+
+6. Run the pipeline:
 
    ```powershell
    python -m paper_pipeline.cli run-all
@@ -154,6 +158,7 @@ python -m paper_pipeline.cli run-all
 python -m paper_pipeline.cli init-data
 python -m paper_pipeline.cli scan-pdfs
 python -m paper_pipeline.cli validate-manifest
+python -m paper_pipeline.cli preflight-pdfs
 python -m paper_pipeline.cli process
 python -m paper_pipeline.cli chunk
 python -m paper_pipeline.cli report
@@ -178,6 +183,8 @@ All commands read `config/config.yaml` by default.
   - `data/chunks/chunks.jsonl`
 - Quality report:
   - `data/reports/conversion_quality_report.md`
+- PDF preflight report:
+  - `data/reports/pdf_preflight_report.md`
 - Defense-preparation helpers:
   - `data/reports/examiner_overview.md`
   - `data/reports/theme_index.md`
@@ -219,6 +226,21 @@ llm_export:
 ```
 
 The export command does not call an LLM and does not upload anything.
+
+## Generated Output Cleanup
+
+The pipeline filters processed JSON by the current manifest before chunking,
+reporting, and LLM export. That means old generated files from earlier titles or
+metadata edits are ignored even if they still exist on disk. Automatic deletion
+is off by default on Windows to avoid noisy permission warnings:
+
+```yaml
+processing:
+  clean_generated_outputs: false
+```
+
+Set this to `true` only when you want the pipeline to try deleting generated
+Markdown/JSON/TEI files before processing.
 
 ## Optional GROBID Setup
 
@@ -363,5 +385,7 @@ ruff check .
 - Page ranges are only populated when the converter provides them.
 - Docling, GROBID, Marker, OCR, and vector search are optional integrations and
   depend on external packages or services.
+- `pypdfium2-text` prioritizes complete readable text over high-fidelity
+  table/figure structure.
 - The cleaning step is conservative and prioritizes faithful extraction over
   aggressive rewriting.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -126,6 +127,72 @@ def title_from_filename(filename: str) -> str:
     return Path(filename).stem.replace("_", " ").replace("-", " ")
 
 
+def year_from_filename(filename: str) -> str:
+    match = re.search(r"\b(19\d{2}|20\d{2})\b", Path(filename).stem)
+    return match.group(1) if match else ""
+
+
+def is_suspicious_source(source: str) -> bool:
+    source = re.sub(r"\s+", " ", source or "").strip()
+    if not source:
+        return False
+    lower = source.lower()
+    suspicious_fragments = [
+        "3b2",
+        "acrobat",
+        "distiller",
+        "microsoft word",
+        "original paper",
+        "publishing system",
+        "research paper",
+        "total publishing",
+        "unicode",
+    ]
+    if any(fragment in lower for fragment in suspicious_fragments):
+        return True
+    journalish_words = [
+        "buildings",
+        "computers",
+        "ecology",
+        "energy",
+        "journal",
+        "management",
+        "operations",
+        "policy",
+        "reports",
+        "research",
+        "review",
+        "reviews",
+        "science",
+        "sustainability",
+        "systems",
+    ]
+    return len(source) > 45 and not any(
+        word in lower
+        for word in journalish_words
+    )
+
+
+def metadata_consistency_warnings(
+    row: dict[str, str],
+    extracted: ExtractedPdfMetadata,
+    filename: str,
+) -> list[str]:
+    warnings: list[str] = []
+    filename_year = year_from_filename(filename)
+    row_year = str(row.get("year") or "").strip()
+    if filename_year and extracted.year and filename_year != extracted.year:
+        warnings.append(
+            f"filename year {filename_year} differs from extracted PDF year {extracted.year}"
+        )
+    if filename_year and row_year and filename_year != row_year:
+        warnings.append(f"manifest year {row_year} differs from filename year {filename_year}")
+    source = str(row.get("source") or extracted.source or "").strip()
+    if is_suspicious_source(source):
+        warnings.append(f"source looks suspicious: {source}")
+    return warnings
+
+
 def merge_extracted_metadata(
     row: dict[str, str],
     extracted: ExtractedPdfMetadata,
@@ -134,6 +201,7 @@ def merge_extracted_metadata(
     updated = dict(row)
     changed: list[str] = []
     filename_title = title_from_filename(filename)
+    filename_year = year_from_filename(filename)
 
     if not updated.get("examiner"):
         updated["examiner"] = examiner_from_filename(filename)
@@ -152,13 +220,23 @@ def merge_extracted_metadata(
         changed.append("title")
 
     for field_name in ["year", "doi", "source"]:
-        value = getattr(extracted, field_name)
+        value = filename_year if field_name == "year" and filename_year else getattr(
+            extracted, field_name
+        )
         should_replace_draft = (
             updated.get("notes", "").startswith("Draft row from scan-pdfs")
             and updated.get(field_name) != value
         )
         if value and (not updated.get(field_name) or should_replace_draft):
             updated[field_name] = value
+            changed.append(field_name)
+        elif (
+            field_name == "source"
+            and not value
+            and updated.get("notes", "").startswith("Draft row from scan-pdfs")
+            and is_suspicious_source(updated.get("source", ""))
+        ):
+            updated["source"] = ""
             changed.append(field_name)
 
     if changed and updated.get("notes") == "Draft row from scan-pdfs":
@@ -190,6 +268,7 @@ def scan_pdfs(config: AppConfig) -> OperationResult:
     for filename in sorted(discovered_names):
         pdf_path = discovered_names[filename]
         extracted = extract_pdf_metadata(pdf_path)
+        scanned_row: dict[str, str]
         if filename not in existing:
             row, changed = merge_extracted_metadata(
                 {
@@ -204,9 +283,8 @@ def scan_pdfs(config: AppConfig) -> OperationResult:
                 extracted,
                 filename,
             )
-            rows.append(
-                row
-            )
+            rows.append(row)
+            scanned_row = row
             messages.append(f"Added draft manifest row for {filename}")
             if changed:
                 messages.append(f"Extracted metadata for {filename}: {', '.join(changed)}")
@@ -216,10 +294,13 @@ def scan_pdfs(config: AppConfig) -> OperationResult:
             )
             updated_row, changed = merge_extracted_metadata(rows[row_index], extracted, filename)
             rows[row_index] = updated_row
+            scanned_row = updated_row
             if changed:
                 messages.append(f"Updated metadata for {filename}: {', '.join(changed)}")
 
         for warning in extracted.warnings:
+            warnings.append(f"{filename}: {warning}")
+        for warning in metadata_consistency_warnings(scanned_row, extracted, filename):
             warnings.append(f"{filename}: {warning}")
 
     for row in rows:
@@ -282,6 +363,12 @@ def validate_manifest(config: AppConfig) -> OperationResult:
                 row_warnings.append(f"{field_name} missing")
         if not str(row.get("doi") or "").strip():
             row_warnings.append("doi missing")
+        filename_year = year_from_filename(filename)
+        if filename_year and str(row.get("year") or "").strip() != filename_year:
+            row_warnings.append(f"manifest year differs from filename year {filename_year}")
+        source = str(row.get("source") or "")
+        if is_suspicious_source(source):
+            row_warnings.append(f"source looks suspicious: {source}")
 
         enriched.append(
             {

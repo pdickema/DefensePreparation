@@ -12,7 +12,7 @@ paths:
   reports_dir: data/reports
 
 conversion:
-  primary: docling
+  primary: pypdfium2-text
   use_grobid: false
   grobid_url: "http://localhost:8070"
   fallback_marker: false
@@ -40,6 +40,9 @@ privacy:
 defense_prep:
   enabled: true
   generate_llm_hooks: true
+
+processing:
+  clean_generated_outputs: false
 
 llm_export:
   enabled: true

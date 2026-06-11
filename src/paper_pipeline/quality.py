@@ -6,7 +6,8 @@ from pathlib import Path
 from statistics import mean
 
 from paper_pipeline.config import AppConfig
-from paper_pipeline.manifest import list_pdfs
+from paper_pipeline.manifest import list_pdfs, read_manifest
+from paper_pipeline.metadata import paper_id
 from paper_pipeline.utils import ensure_dir, estimate_tokens, read_json, read_jsonl
 
 
@@ -17,6 +18,13 @@ def generate_quality_report(config: AppConfig) -> Path:
     raw_pdfs = list_pdfs(config.path("raw_pdf_dir"))
     json_dir = config.path("json_dir")
     json_files = sorted(json_dir.glob("*.json")) if json_dir.exists() else []
+    expected_ids = {
+        paper_id(row)
+        for row in read_manifest(config.path("manifest_path"))
+        if row.get("filename")
+    }
+    if expected_ids:
+        json_files = [json_file for json_file in json_files if json_file.stem in expected_ids]
     chunks = read_jsonl(config.path("chunks_jsonl"))
     enriched_rows = _read_enriched(config.path("processed_dir") / "manifest_enriched.csv")
     processed_filenames: set[str] = set()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from paper_pipeline.config import AppConfig, LlmExportConfig, PathsConfig
-from paper_pipeline.llm_export import export_llm_corpus
+from paper_pipeline.llm_export import _select_examiner_chunks, export_llm_corpus
 from paper_pipeline.manifest import initialize_data
 from paper_pipeline.utils import read_jsonl, write_json, write_jsonl
 
@@ -68,6 +68,26 @@ def test_export_llm_can_exclude_references(tmp_path):
     rows = read_jsonl(config.path("llm_export_dir") / "chunks_for_rag.jsonl")
 
     assert [row["chunk_id"] for row in rows] == ["chunk_0001"]
+
+
+def test_export_llm_selects_excerpts_across_papers():
+    chunks = []
+    for paper_index in range(3):
+        for chunk_index, section in enumerate(["References", "Introduction", "Methods"], start=1):
+            chunks.append(
+                {
+                    "chunk_id": f"paper_{paper_index}_{chunk_index}",
+                    "paper_id": f"paper_{paper_index}",
+                    "title": f"Paper {paper_index}",
+                    "chunk_index": chunk_index,
+                    "section": section,
+                }
+            )
+
+    selected = _select_examiner_chunks(chunks, limit=3)
+
+    assert {chunk["paper_id"] for chunk in selected} == {"paper_0", "paper_1", "paper_2"}
+    assert all(chunk["section"] == "Introduction" for chunk in selected)
 
 
 def _write_mock_corpus(config: AppConfig, include_reference_chunk: bool = False) -> None:

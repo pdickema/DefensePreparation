@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import stat
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -49,6 +50,9 @@ def process_papers(config: AppConfig) -> OperationResult:
         if NO_PDFS_MESSAGE not in result.messages:
             result.messages.append(NO_PDFS_MESSAGE)
         return result
+
+    if config.processing.clean_generated_outputs:
+        result.warnings.extend(_clear_generated_paper_outputs(config))
 
     grobid_available = False
     if config.conversion.use_grobid:
@@ -186,6 +190,31 @@ def _convert_with_fallbacks(
     return None
 
 
+def _clear_generated_paper_outputs(config: AppConfig) -> list[str]:
+    warnings: list[str] = []
+    generated_patterns = {
+        "json_dir": "*.json",
+        "markdown_dir": "*.md",
+        "tei_dir": "*.tei.xml",
+    }
+    for path_name, pattern in generated_patterns.items():
+        directory = config.path(path_name)
+        if not directory.exists():
+            continue
+        for path in directory.glob(pattern):
+            if path.name == ".gitkeep":
+                continue
+            try:
+                path.unlink()
+            except PermissionError:
+                try:
+                    path.chmod(stat.S_IWRITE)
+                    path.unlink()
+                except OSError as exc:
+                    warnings.append(f"Could not remove stale generated file {path}: {exc}")
+    return warnings
+
+
 def _grobid_upload_allowed(config: AppConfig) -> bool:
     if config.privacy.allow_external_pdf_upload:
         return True
@@ -233,6 +262,7 @@ def _pdfium_if_docling_incomplete(
 def chunk_processed_papers(config: AppConfig) -> OperationResult:
     json_dir = config.path("json_dir")
     json_files = sorted(json_dir.glob("*.json")) if json_dir.exists() else []
+    expected_ids = _current_paper_ids(config)
     if not json_files:
         return OperationResult(
             messages=[
@@ -242,6 +272,8 @@ def chunk_processed_papers(config: AppConfig) -> OperationResult:
 
     chunks: list[dict[str, Any]] = []
     for json_file in json_files:
+        if expected_ids and json_file.stem not in expected_ids:
+            continue
         paper = read_json(json_file)
         chunks.extend(
             chunking.chunk_paper(
@@ -253,6 +285,14 @@ def chunk_processed_papers(config: AppConfig) -> OperationResult:
 
     count = chunking.write_chunks(config.path("chunks_jsonl"), chunks)
     return OperationResult(messages=[f"Wrote {count} chunks to {config.path('chunks_jsonl')}"])
+
+
+def _current_paper_ids(config: AppConfig) -> set[str]:
+    return {
+        paper_id(row)
+        for row in read_manifest(config.path("manifest_path"))
+        if row.get("filename")
+    }
 
 
 def run_all(config: AppConfig) -> OperationResult:
