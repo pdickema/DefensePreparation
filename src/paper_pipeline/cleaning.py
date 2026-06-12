@@ -13,6 +13,10 @@ def fix_hyphenation(text: str) -> str:
     return re.sub(r"(\w)-\n(\w)", r"\1\2", text)
 
 
+def fix_broken_urls(text: str) -> str:
+    return re.sub(r"\b(https?://)\s*\n\s*", r"\1", text)
+
+
 def remove_repeated_headers_footers(text: str) -> str:
     pages = text.split("\f")
     if len(pages) < 3:
@@ -56,10 +60,24 @@ def normalize_whitespace(text: str) -> str:
 def clean_text(text: str) -> str:
     text = normalize_unicode(text)
     text = fix_hyphenation(text)
+    text = fix_broken_urls(text)
     text = remove_repeated_headers_footers(text)
     text = remove_isolated_page_numbers(text)
     return normalize_whitespace(text)
 
 
 def clean_markdown(markdown: str) -> str:
-    return clean_text(markdown)
+    return wrap_bare_urls(clean_text(markdown))
+
+
+def wrap_bare_urls(text: str) -> str:
+    return re.sub(r"(?<![<(])\bhttps?://[^\s<>)]+", _wrap_url_match, text)
+
+
+def _wrap_url_match(match: re.Match[str]) -> str:
+    url = match.group(0)
+    trailing = ""
+    while url and url[-1] in ".,;:]":
+        trailing = url[-1] + trailing
+        url = url[:-1]
+    return f"<{url}>{trailing}"

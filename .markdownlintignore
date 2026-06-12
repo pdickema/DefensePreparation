@@ -1,0 +1,4 @@
+data/processed/**
+data/chunks/**
+data/reports/**
+data/exports/**
