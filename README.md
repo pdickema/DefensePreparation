@@ -171,6 +171,35 @@ python -m paper_pipeline.cli run-all
 
 All commands read `config/config.yaml` by default.
 
+## Short Terminal Launcher
+
+On Windows, you can use the root-level launcher instead of typing the full
+Python module command:
+
+```powershell
+.\pipeline.cmd all
+.\pipeline.cmd preflight
+.\pipeline.cmd scan
+.\pipeline.cmd manifest
+.\pipeline.cmd export
+.\pipeline.cmd query "Which themes are relevant for my defense?"
+```
+
+Common aliases:
+
+- `all` or `run` -> `run-all`
+- `preflight` -> `preflight-pdfs`
+- `scan` -> `scan-pdfs`
+- `manifest` -> `validate-manifest`
+- `export` or `llm` -> `export-llm`
+
+If your PowerShell execution policy allows local scripts, the equivalent
+PowerShell launcher is also available:
+
+```powershell
+.\pipeline.ps1 all
+```
+
 ## Outputs
 
 - Clean Markdown per paper:
